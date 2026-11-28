@@ -840,3 +840,50 @@ func TestPresence(t *testing.T) {
 	resp = h.do(http.MethodPost, "/w/nope/presence", url.Values{"c": {"p1"}}, nil)
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
+
+// ask_here moves the questions to the chat until someone uses a page again.
+func TestAskHere(t *testing.T) {
+	h := newHarness(t)
+	cwd, specPath := writeSpec(t)
+	b := h.bridge("ws_A", cwd)
+	b.req(protocol.TypeSpecShow, &protocol.SpecShow{RootAbs: specPath})
+	b.req(protocol.TypeAsk, askBody(cwd, specPath, "qs_1"))
+
+	// The page was used after qs_1 was shown: an automatic move is refused.
+	resp := h.do(http.MethodPost, "/w/ws_A/presence", url.Values{"c": {"p1"}, "active": {"1"}}, nil)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	var here protocol.AskHereResult
+	require.NoError(t, envDecode(b.req(protocol.TypeAskHere, &protocol.AskHere{On: true, Auto: true}), &here))
+	assert.False(t, here.InChat)
+
+	// Asked for: the pending set closes with ask_in_chat.
+	require.NoError(t, envDecode(b.req(protocol.TypeAskHere, &protocol.AskHere{On: true}), &here))
+	assert.True(t, here.InChat)
+	assert.Equal(t, "qs_1", here.Closed)
+	h.d.mu.Lock()
+	w := h.d.workspaces["ws_A"]
+	assert.Nil(t, w.Pending)
+	assert.Equal(t, statusAskInChat, w.History[len(w.History)-1].Status)
+	h.d.mu.Unlock()
+
+	// The next set is not shown: Claude asks it in the chat.
+	var shown protocol.AskShown
+	require.NoError(t, envDecode(b.req(protocol.TypeAsk, askBody(cwd, specPath, "qs_2")), &shown))
+	assert.True(t, shown.InChat)
+	h.d.mu.Lock()
+	assert.Nil(t, w.Pending)
+	assert.Len(t, w.History, 2)
+	h.d.mu.Unlock()
+
+	// Someone uses the page: questions come back to the viewer.
+	resp = h.do(http.MethodPost, "/w/ws_A/presence", url.Values{"c": {"p1"}, "active": {"1"}}, nil)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	shown = protocol.AskShown{}
+	require.NoError(t, envDecode(b.req(protocol.TypeAsk, askBody(cwd, specPath, "qs_3")), &shown))
+	assert.False(t, shown.InChat)
+	h.d.mu.Lock()
+	assert.NotNil(t, w.Pending)
+	h.d.mu.Unlock()
+}
+
+func envDecode(env protocol.Envelope, v any) error { return env.Decode(v) }

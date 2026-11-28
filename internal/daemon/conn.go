@@ -278,6 +278,18 @@ func (d *Daemon) dispatch(c *Conn, env protocol.Envelope) bool {
 			return true
 		}
 		c.send(protocol.TypeResult, env.ID, res)
+	case protocol.TypeAskHere:
+		var b protocol.AskHere
+		if err := decode(env, &b); err != nil {
+			c.sendError(env.ID, err)
+			return true
+		}
+		res, err := d.askHere(c.ws, &b)
+		if err != nil {
+			c.sendError(env.ID, err)
+			return true
+		}
+		c.send(protocol.TypeResult, env.ID, res)
 	case protocol.TypeViewers:
 		c.send(protocol.TypeResult, env.ID, d.viewers(c.ws))
 	default:

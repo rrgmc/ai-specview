@@ -105,7 +105,7 @@ entries (refcounted), which only read.
 | `POST /w/{ws}/qs/{qs}/in-chat` | → `ask_result{in_chat}` |
 | `POST /w/{ws}/qs/{qs}/dismiss` | → `ask_result{dismissed}` |
 | `POST /w/{ws}/close` | Close an archived workspace |
-| `POST /w/{ws}/presence` | Form: `c` (the page's id), `hidden` (`1` or `0`, when the page is hidden or shown), `active` (`1` when someone used the page: mouse, keyboard, scroll; sent at most every 5 seconds) → 204 |
+| `POST /w/{ws}/presence` | Form: `c` (the page's id), `hidden` (`1` or `0`, when the page is hidden or shown), `active` (`1` when someone used the page: mouse, keyboard, scroll; sent at most every 5 seconds; it also moves questions that were in the chat back to the viewer, `ask_here`) → 204 |
 | `POST /w/{ws}/open` | Form: `kind` (`doc` with a document key, or `code` with a code tab's absolute path), `line`, `editor` → opens the file in the editor; other files are refused |
 | `GET /static/…` | Embedded assets |
 
@@ -158,6 +158,10 @@ State is small, so no event log is needed.
   question panel above the code pane. "Questions below" in the header switches
   to a layout with the panel docked under both panes; "Questions beside"
   switches back.
+- **Questions in chat**: a header pill shown while the session's questions go
+  to the chat because nobody was at the page (`ask_here`, 01). Using the page
+  hides it and brings the questions back. The history lists each set asked
+  in the chat as "Asked in chat".
 - CSS grid; the artifact sidebar only appears when the root is a folder.
 - **Layout per question set** (07): the doc pane shows while a spec is shown,
   and for a whole question set when any of its questions has a document.

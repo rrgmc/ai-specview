@@ -136,7 +136,7 @@ func (d *Daemon) active(pids []int, cwd string) *protocol.ActiveResult {
 		// ask mode is off, it no longer blocks the built-in question tool.
 		specOpen := w.Root != nil && w.Done == nil && !w.RootAuto && !w.Released
 		if specOpen || w.AskMode {
-			return &protocol.ActiveResult{Active: true, WS: w.ID, URL: d.wsURL(w.ID), AskMode: !specOpen}
+			return &protocol.ActiveResult{Active: true, WS: w.ID, URL: d.wsURL(w.ID), AskMode: !specOpen, InChat: w.InChat}
 		}
 	}
 	return &protocol.ActiveResult{}
@@ -355,6 +355,18 @@ func (d *Daemon) ask(id string, req *protocol.Ask) (*protocol.AskShown, error) {
 	if w == nil {
 		return nil, errors.New("unknown workspace")
 	}
+	if w.InChat {
+		// Nobody is at the viewer: Claude asks this set in the chat. Close a
+		// set still pending and list this one in the history.
+		if w.Pending != nil && w.Pending.Ask.QSID != req.QSID {
+			old := w.Pending.Ask.QSID
+			d.closePending(w, statusAskInChat, nil, nil)
+			w.send(protocol.TypeAskResult, "", &protocol.AskResult{QSID: old, Status: protocol.StatusAskInChat})
+		}
+		w.History = append(w.History, &HistoryEntry{QS: &questionSet{Ask: *req, Shown: time.Now()}, Status: statusAskInChat, At: time.Now()})
+		d.hub.Publish(w.ID, d.historyEvent(w))
+		return &protocol.AskShown{QSID: req.QSID, Matches: []protocol.QuestionMatch{}, InChat: true}, nil
+	}
 	d.switchToAsked(w, req)
 	if w.Pending != nil && w.Pending.Ask.QSID != req.QSID {
 		old := w.Pending.Ask.QSID
@@ -415,6 +427,34 @@ func (d *Daemon) cancel(id string, req *protocol.AskCancel) error {
 // done marks the spec as finished (spec_done). A pending question set is
 // withdrawn: Claude said no more answers are needed. Highlights and code
 // tabs are cleared.
+// askHere moves the workspace's questions to the chat or back to the
+// viewer (ask_here). Moving them to the chat closes a pending set with
+// ask_in_chat, which ends a waiting ask or ask_wait.
+func (d *Daemon) askHere(id string, req *protocol.AskHere) (*protocol.AskHereResult, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	w := d.workspaces[id]
+	if w == nil {
+		return nil, errors.New("unknown workspace")
+	}
+	res := &protocol.AskHereResult{InChat: req.On}
+	if req.On && req.Auto && !w.SeenAt.IsZero() && w.Pending != nil && !w.SeenAt.Before(w.Pending.Shown) {
+		// Someone used the page after the bridge decided nobody had: keep
+		// the questions in the viewer.
+		res.InChat = false
+		return res, nil
+	}
+	w.InChat = req.On
+	if req.On && w.Pending != nil {
+		res.Closed = w.Pending.Ask.QSID
+		d.closePending(w, statusAskInChat, nil, nil)
+		w.send(protocol.TypeAskResult, "", &protocol.AskResult{QSID: res.Closed, Status: protocol.StatusAskInChat})
+	}
+	d.hub.Publish(w.ID, d.stateEvent(w))
+	d.publishIndex()
+	return res, nil
+}
+
 // askMode turns ask mode on or off for a workspace.
 func (d *Daemon) askMode(id string, req *protocol.AskMode) (*protocol.AskModeResult, error) {
 	d.mu.Lock()

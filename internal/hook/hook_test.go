@@ -154,6 +154,14 @@ func TestBlocksInAskMode(t *testing.T) {
 	assert.Equal(t, ExitBlock, code)
 	assert.Equal(t, ReasonAskMode+"\n", msg)
 
+	// Questions moved to the chat (ask_here): allow, until moved back.
+	e.req(protocol.TypeAskHere, &protocol.AskHere{On: true})
+	code, _ = run(e.sock, askEvent, ancestors)
+	assert.Equal(t, ExitAllow, code)
+	e.req(protocol.TypeAskHere, &protocol.AskHere{On: false})
+	code, _ = run(e.sock, askEvent, ancestors)
+	assert.Equal(t, ExitBlock, code)
+
 	// Ask mode off: allow.
 	e.req(protocol.TypeAskMode, &protocol.AskMode{On: false})
 	code, _ = run(e.sock, askEvent, ancestors)

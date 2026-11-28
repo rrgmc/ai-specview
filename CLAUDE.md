@@ -5,12 +5,13 @@ document passage it is about and the code at the right lines. Spec elaboration
 builds on it. It is one Go binary, `ai-contextview`:
 
 - `ai-contextview mcp`: a stdio MCP server ("bridge"), one per Claude session. It
-  offers the tools `spec_show`, `focus`, `ask`, `ask_wait`, `ask_mode` and
-  `spec_done`.
+  offers the tools `spec_show`, `focus`, `ask`, `ask_wait`, `ask_mode`,
+  `ask_here` and `spec_done`.
 - `ai-contextview serve`: the viewer daemon, one per user. It serves the web page
   (`http://127.0.0.1:7878`) and talks to the bridges over a Unix socket.
 - `ai-contextview hook`: a Claude Code hook. It blocks the built-in
-  `AskUserQuestion` only in a session that has a spec open or is in ask mode,
+  `AskUserQuestion` only in a session that has a spec open or is in ask mode
+  (and allows it while the questions are in the chat, `ask_here`),
   and reports written markdown files and started skills, so the daemon can
   pick the working document (docs/07-layers.md).
 - `ai-contextview fakeapp`: a terminal stand-in for the daemon, for testing.
@@ -66,7 +67,7 @@ Read-only work (reading code, answering questions) needs no worktree.
 | `internal/identity/` | Workspace id, project name, Claude and ancestor process ids |
 | `internal/e2e/` | End-to-end tests, including the multi-process test |
 | `protocol/` | Golden message fixtures and quote-matching fixtures |
-| `plugin/` | The Claude Code plugin: `.mcp.json`, launcher scripts (`sh` and Windows `.cmd`), `skills/spec-elaborate/`, `skills/ask-mode/` and `skills/spec-mode/` (browser), `skills/spec-elaborate-mod/`, `skills/ask-mode-mod/` and `skills/spec-mode-mod/` (pane), `hooks/` (the `PreToolUse` hook and the pane mod's TypeScript module), `types/` and `tests/` of the mod |
+| `plugin/` | The Claude Code plugin: `.mcp.json`, launcher scripts (`sh` and Windows `.cmd`), `skills/spec-elaborate/`, `skills/ask-mode/`, `skills/spec-mode/` and `skills/ask-here/` (browser), `skills/spec-elaborate-mod/`, `skills/ask-mode-mod/` and `skills/spec-mode-mod/` (pane), `hooks/` (the `PreToolUse` hook and the pane mod's TypeScript module), `types/` and `tests/` of the mod |
 | `.claude-plugin/` | `marketplace.json`: the repository is a plugin marketplace |
 | `tools/changelog/` | Release tool: merges `changelog.d/` into `CHANGELOG.md`, checks a tag, prints release notes |
 | `.github/workflows/` | `ci.yml` (tests) and `release.yml` (on `v*` tags) |
@@ -139,5 +140,5 @@ go install ./cmd/ai-contextview && ai-contextview serve --restart
   POSTs and sends no CORS headers. Keep it that way.
 - The environment variables (`AI_CONTEXTVIEW_SOCKET`, `AI_CONTEXTVIEW_ADDR`,
   `AI_CONTEXTVIEW_ASK_MODE`, `AI_CONTEXTVIEW_DOC_PATHS`,
-  `AI_CONTEXTVIEW_ASK_WAIT`, `AI_CONTEXTVIEW_OPEN`, `AI_CONTEXTVIEW_DAEMON`) are listed in the
+  `AI_CONTEXTVIEW_ASK_WAIT`, `AI_CONTEXTVIEW_OPEN`, `AI_CONTEXTVIEW_AWAY`, `AI_CONTEXTVIEW_DAEMON`) are listed in the
   README.

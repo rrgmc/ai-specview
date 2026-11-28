@@ -4,7 +4,9 @@
 //     only while this Claude session has a spec open in ai-contextview or is in
 //     ask mode, and tells Claude to use ai-contextview's ask tool instead. In
 //     every other case it allows the tool, so other sessions and spec-free
-//     work keep the built-in question tool.
+//     work keep the built-in question tool. While the session's questions
+//     are in the chat (ask_here, for a user away from the viewer), it
+//     allows the tool too.
 //   - PostToolUse on Write, Edit and MultiEdit: it reports a markdown file
 //     Claude wrote, so the daemon can make it the working document (07).
 //   - PreToolUse on Skill: it reports the skill Claude starts, a signal for
@@ -101,7 +103,9 @@ func Run(in io.Reader, out, errOut io.Writer, socket string, pids []int) int {
 		return ExitAllow
 	}
 	res, err := query(socket, pids, ev.Cwd)
-	if err != nil || !res.Active {
+	if err != nil || !res.Active || res.InChat {
+		// InChat: the user is away from the viewer, so Claude asks in the
+		// chat (ask_here).
 		return ExitAllow
 	}
 	if res.AskMode {

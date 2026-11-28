@@ -20,6 +20,8 @@ const (
 	statusReplace = "replaced"
 	statusCancel  = "cancelled"
 	statusGone    = "disconnected"
+	// statusAskInChat closes a set that Claude asks in the chat instead.
+	statusAskInChat = protocol.StatusAskInChat
 )
 
 // CodeTab is one open code file.
@@ -119,6 +121,9 @@ type Workspace struct {
 	// SeenAt is when someone last used a page of the workspace (mouse,
 	// keyboard, scroll), as the page reports it.
 	SeenAt time.Time
+	// InChat is set by ask_here: the session's questions go to the chat
+	// until someone uses a page of the workspace again.
+	InChat bool
 }
 
 // DoneState is the finished-spec message.

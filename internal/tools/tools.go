@@ -53,7 +53,10 @@ type Bridge struct {
 	// used the viewer page since the questions were shown. Zero means
 	// DefaultNudgeDelay.
 	NudgeDelay time.Duration
-	Logf       func(format string, args ...any)
+	// StayInViewer keeps unseen questions in the viewer (pending and a line
+	// in the chat) instead of moving them to the chat (see AwayFromEnv).
+	StayInViewer bool
+	Logf         func(format string, args ...any)
 
 	mu      sync.Mutex
 	root    *specsrc.Root
@@ -100,6 +103,11 @@ const (
 	MsgNoViewer = "No viewer page is open, so the user cannot see these questions. " +
 		"If you have the built-in browser tools, open url in the built-in browser pane now (preview_start with url) and tell the user in one line; " +
 		"otherwise the system browser opens shortly. Then call ask_wait with this id."
+	MsgAskInChat = "The user is away from the viewer, so ask these same questions in the chat now, with the built-in question tool " +
+		"(AskUserQuestion), which is allowed while they are away: the same questions and options, and for each the passage or code it is about in a short line. " +
+		"Keep calling ask for later questions: they come back to the viewer by themselves once the user uses it again."
+	MsgHereOn    = "Questions now go to the chat. Ask them with the built-in question tool (AskUserQuestion); re-ask in the chat any question that was waiting in the viewer. Keep calling ask for later questions: it says when to ask in the chat, and the questions come back to the viewer once the user uses it again."
+	MsgHereOff   = "Questions go to the viewer again: ask them with the ask tool."
 	MsgDismissed = "The user skipped these questions. Continue without these decisions; ask in chat only if one is essential."
 	MsgDeferred  = "The user chose to decide some questions later (see deferred). Add each to the spec's open questions with its refs, " +
 		"continue without the decision, and ask them again before finishing."
@@ -120,6 +128,12 @@ const OpenPane = "pane"
 // on for every session.
 func AskModeFromEnv() bool {
 	return os.Getenv("AI_CONTEXTVIEW_ASK_MODE") == "always"
+}
+
+// AwayFromEnv reports whether AI_CONTEXTVIEW_AWAY=wait keeps unseen
+// questions in the viewer; by default (chat) they move to the chat.
+func AwayFromEnv() bool {
+	return os.Getenv("AI_CONTEXTVIEW_AWAY") == "wait"
 }
 
 // OpenInFromEnv returns OpenPane unless AI_CONTEXTVIEW_OPEN is set to another
@@ -227,6 +241,7 @@ func Register(s *mcp.Server, b *Bridge) {
 			"In ask mode, give a question about the whole document (a sign-off, a summary) no refs: a ref highlights one passage, which reads as the subject of the question. " +
 			"Results: answered (apply the answers), in_chat (wait for the user's chat message), " +
 			"pending (call ask_wait with question_set_id; a pending result with url means no viewer page is open: open url in the built-in browser pane first), " +
+			"ask_in_chat (the user is away from the viewer: ask the same questions in the chat with the built-in question tool), " +
 			"dismissed (continue without it). " +
 			"An answered result may list deferred questions (the user chose Decide later): record them as open questions and ask again before finishing. " +
 			"Mark the option you recommend with recommended: true.",
@@ -246,6 +261,12 @@ func Register(s *mcp.Server, b *Bridge) {
 			"(globs) the first written file that matches is shown, without them the file that looks most like a spec. " +
 			"If the result has open: \"pane\", open the url in the built-in browser pane when that tool is available.",
 	}, b.AskModeTool)
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "ask_here",
+		Description: "Move this session's questions from the ai-contextview viewer to the chat, for a user who is away from the machine " +
+			"(for example on Remote Control), or back to the viewer with off: true. In the chat, ask with the built-in question tool; " +
+			"the questions come back to the viewer by themselves once the user uses the viewer page again.",
+	}, b.AskHereTool)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "ask_wait",
 		Description: "Keep waiting for a pending question set returned by ask. Same result shape as ask.",
@@ -506,6 +527,9 @@ func (b *Bridge) Ask(ctx context.Context, _ *mcp.CallToolRequest, in protocol.As
 	if err := reply.Decode(&shown); err != nil {
 		return nil, out, err
 	}
+	if shown.InChat {
+		return nil, protocol.AskOutput{Status: protocol.StatusAskInChat, QuestionSetID: ask.QSID, Message: MsgAskInChat}, nil
+	}
 	for _, m := range shown.Matches {
 		if m.Match != protocol.MatchNone {
 			continue
@@ -577,8 +601,54 @@ func (b *Bridge) waitNudge(ctx context.Context, qs string) (*mcp.CallToolResult,
 	if b.seen(ctx) {
 		return b.wait(ctx, qs, b.AskWait-nd)
 	}
+	if !b.StayInViewer {
+		// Nobody is at the viewer, perhaps because the user follows the
+		// session from another device: move the questions to the chat.
+		if res, err := b.askHere(ctx, true, true); err == nil && res.InChat {
+			b.mu.Lock()
+			delete(b.pending, qs)
+			b.mu.Unlock()
+			return nil, protocol.AskOutput{Status: protocol.StatusAskInChat, QuestionSetID: qs, Message: MsgAskInChat}, nil
+		} else if err == nil {
+			// Someone used the page meanwhile.
+			return b.wait(ctx, qs, b.AskWait-nd)
+		}
+	}
 	b.markPending(qs)
 	return nil, protocol.AskOutput{Status: protocol.StatusPending, QuestionSetID: qs, URL: b.Daemon.URL(), Message: MsgUnseen}, nil
+}
+
+// askHere sends ask_here to the daemon.
+func (b *Bridge) askHere(ctx context.Context, on, auto bool) (*protocol.AskHereResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	reply, err := b.Daemon.Request(ctx, protocol.TypeAskHere, &protocol.AskHere{On: on, Auto: auto})
+	if err != nil {
+		return nil, err
+	}
+	var res protocol.AskHereResult
+	if err := reply.Decode(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// AskHereTool implements the ask_here tool.
+func (b *Bridge) AskHereTool(ctx context.Context, _ *mcp.CallToolRequest, in protocol.AskHereInput) (*mcp.CallToolResult, protocol.AskHereOutput, error) {
+	res, err := b.askHere(ctx, !in.Off, false)
+	if err != nil {
+		return nil, protocol.AskHereOutput{}, err
+	}
+	if res.Closed != "" {
+		b.mu.Lock()
+		delete(b.pending, res.Closed)
+		b.mu.Unlock()
+	}
+	out := protocol.AskHereOutput{InChat: res.InChat, Closed: res.Closed, Message: MsgHereOff}
+	if res.InChat {
+		out.Message = MsgHereOn
+	}
+	return nil, out, nil
 }
 
 // seen reports whether someone used the viewer page since the pending
@@ -809,6 +879,9 @@ func (b *Bridge) finish(ctx context.Context, qs string, res *protocol.AskResult,
 		}
 	case protocol.StatusInChat:
 		out.Message = MsgInChat
+	case protocol.StatusAskInChat:
+		out.QuestionSetID = qs
+		out.Message = MsgAskInChat
 	case protocol.StatusDismissed:
 		out.Message = MsgDismissed
 	}

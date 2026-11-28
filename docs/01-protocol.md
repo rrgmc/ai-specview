@@ -183,9 +183,20 @@ Result, one of:
 {"status": "pending", "question_set_id": "qs_7f3a", "url": "http://127.0.0.1:7878/w/ws_A",
  "message": "No viewer page is open, so the user cannot see these questions. …"}
 
+{"status": "ask_in_chat", "question_set_id": "qs_7f3a",
+ "message": "The user is away from the viewer, so ask these same questions in the chat now, with the built-in question tool …"}
+
 {"status": "dismissed", "keep_open": ["q1"],
  "message": "The user skipped these questions. Continue without these decisions; ask in chat only if one is essential."}
 ```
+
+`ask_in_chat` means nobody is at the viewer, for example because the user
+follows the session over Remote Control from another device, where a
+`127.0.0.1` page cannot open. Claude asks the same questions in the chat with
+the built-in question tool, which `ai-contextview hook` allows while the
+questions are in the chat (`ask_here`). `ask` returns it at once while they
+are in the chat, and also at the nudge (Failure modes) unless
+`AI_CONTEXTVIEW_AWAY=wait`.
 
 `deferred` (optional, `answered` only) lists the questions the user chose
 **Decide later** for. Each also appears in `answers` with `"deferred": true`,
@@ -206,6 +217,17 @@ each of them as an `open-questions/` file (04, M8). Omitted when empty.
 
 `{"question_set_id": "qs_7f3a"}` → same result shape as `ask`. It exists because
 an MCP tool call can't block forever (see the timeouts in 02).
+
+### `ask_here`
+
+Moves the session's questions to the chat, for a user away from the viewer,
+or back to the viewer with `{"off": true}`. Result:
+`{"in_chat": bool, "closed"?: "qs_…", "message"}`. A question set waiting in
+the viewer is closed (`closed`); Claude asks it again in the chat. Ask mode
+and an open spec stay as they are. The questions come back to the viewer by
+themselves when someone uses a viewer page (`presence` with `active=1`). The
+`ask-here` skill (`/ai-contextview:ask-here`) calls it; the pane mod has no
+such tool (06).
 
 ### `ask_mode`
 
@@ -335,11 +357,12 @@ Match          = "exact" | "normalized" | "fuzzy" | "heading" | "none"
 | `hello` | `{protocol: 1, ws, cwd, claude_pid, bridge_pid, bridge_version, tty?, project_name}` | `hello_ack {daemon_version, url, adopted_from?}` |
 | `spec_show` | `{root_abs, is_dir, primary?, changed_sections?, changed?: [{path, sections?}], auto?: bool, provisional?: bool}` (`auto` marks the replay of a working document the daemon picked, which does not count as Claude's own `spec_show`; `provisional` shows the file until the working document is written, see the `spec_show` tool; the two are exclusive) | `result {primary, sections[], artifacts[]}` or `error` |
 | `focus` | `{docs: [ResolvedDocRef], code: [ResolvedRef]}` | `result {docs: [{path, match}]}` |
-| `ask` | `{qs_id, title?, questions: [ {…, docs: [ResolvedDocRef], code: [ResolvedRef]} ]}` | `ask_shown {matches}` right away, **then later** `ask_result` |
+| `ask` | `{qs_id, title?, questions: [ {…, docs: [ResolvedDocRef], code: [ResolvedRef]} ]}` | `ask_shown {matches}` right away, **then later** `ask_result`; while the questions are in the chat, `ask_shown {in_chat: true}` and nothing is shown (the set is listed in the history as asked in chat) |
 | `ask_cancel` | `{qs_id, reason}` | `result` |
 | `done` | `{summary?}` | `result {}` |
 | `viewers` | `{}` | `result {viewers: int, hidden?: int, seen?: bool, presence?: bool}` (open browser pages of the workspace; `hidden` of them report they are hidden; `seen` when someone used a page since the pending set was shown; `presence` when the daemon tracks `hidden` and `seen`) |
 | `ask_mode` | `{on: bool, spec?: bool, paths?: [abs glob]}` | `result {shown?}` |
+| `ask_here` | `{on: bool, auto?: bool}` (`auto` when the bridge moves unseen questions; refused, with `in_chat: false`, if someone used a page since the pending set was shown) | `result {in_chat: bool, closed?: qs_id}`; a pending set closes with `ask_result {status: "ask_in_chat"}` |
 | `cwd` | `{}`, sent before the bridge resolves a relative path | `result {cwd?: abs}` (the session's folder from the hook; empty when none was reported) |
 | `bye` | `{}` | (none; the bridge closes) |
 
@@ -353,7 +376,7 @@ its session by its ancestor processes, as `active` does.
 
 | type | body | reply |
 |---|---|---|
-| `active` | `{pids: [int], cwd?}` | `result {active, ws?, url?, ask_mode?}` |
+| `active` | `{pids: [int], cwd?}` | `result {active, ws?, url?, ask_mode?, in_chat?}` (`in_chat`: the hook allows the built-in question tool) |
 | `doc_written` | `{pids: [int], path: abs, cwd?}` (a markdown file the hook's file rules let through) | `result {shown: bool, path?}` (`shown` when it just became the working document) |
 | `skill_started` | `{pids: [int], name, cwd?}` | `result {}` |
 | `session_cwd` | `{pids: [int], cwd}`, sent before each of ai-contextview's own MCP tools runs | `result {}` |
@@ -418,10 +441,12 @@ Error codes: `bad_request`, `file_not_found`, `not_markdown`, `empty_folder`,
   opened.
 - **The nudge.** Otherwise `ask` waits for the answers. After 45 seconds
   without an answer it sends `viewers`; if the daemon tracks presence and
-  `seen` is false (nobody used a page since the questions were shown), `ask`
-  returns `pending` with `url`, and its message tells Claude to say in the
-  chat that questions are waiting, then call `ask_wait`. `ask_wait` never
-  nudges. Pages report what they know with `POST /w/{ws}/presence` (03).
+  `seen` is false (nobody used a page since the questions were shown), the
+  bridge sends `ask_here {on: true, auto: true}` and `ask` returns
+  `ask_in_chat`: Claude asks in the chat. With `AI_CONTEXTVIEW_AWAY=wait`, or
+  a daemon that refuses `ask_here`, `ask` returns `pending` with `url`
+  instead, and its message tells Claude to say in the chat that questions
+  are waiting, then call `ask_wait`. `ask_wait` never nudges. Pages report what they know with `POST /w/{ws}/presence` (03).
   - `never`: the bridge opens nothing and waits as usual.
 - **If the daemon restarts,** the bridge reconnects, re-sends `hello` with the
   same `ws`, re-sends the last `spec_show` (or `doc_shown`), the last `ask_mode`, any pending

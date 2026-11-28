@@ -36,6 +36,14 @@ What changed from the plan while building and using it:
   Claude reopens the pane and then calls `ask_wait`. A new `viewers` message
   lets the bridge check 10 seconds later and open the default browser if
   still no page is open.
+- **Questions follow the user to the chat.** The viewer is a loopback page,
+  so a user on Remote Control from another device cannot open it. When a
+  question goes unseen for the nudge delay, the bridge moves the session's
+  questions to the chat (`ask_here`): `ask` returns `ask_in_chat`, the hook
+  allows the built-in question tool, and the page shows "Questions in chat".
+  Using the page moves them back. The `ask-here` skill does the same on
+  request; `AI_CONTEXTVIEW_AWAY=wait` keeps the old nudge. The pane mod has
+  no presence signal, so it is not covered.
 - **Recommended options.** An option can carry `recommended: true` (or a
   "(Recommended)" label suffix, which the bridge turns into the flag); the
   panel marks it.

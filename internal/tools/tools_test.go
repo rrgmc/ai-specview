@@ -592,10 +592,50 @@ func TestAskHiddenViewerReturnsPending(t *testing.T) {
 	assert.Equal(t, protocol.StatusAnswered, out.Status)
 }
 
+func TestAskMovesToChatWhenUnseen(t *testing.T) {
+	e := setup(t, nil)
+	e.fake.SetViewers(1)
+	e.fake.SetPresence(0, false)
+	e.bridge.NudgeDelay = 50 * time.Millisecond
+	e.show(t)
+	start := time.Now()
+	_, out, err := e.bridge.Ask(context.Background(), nil, question("retries use exponential backoff capped at 30s"))
+	require.NoError(t, err)
+	assert.Less(t, time.Since(start), e.bridge.AskWait, "returns at the nudge, not at AskWait")
+	assert.Equal(t, protocol.StatusAskInChat, out.Status)
+	assert.Equal(t, MsgAskInChat, out.Message)
+
+	// The next question goes to the chat at once.
+	start = time.Now()
+	_, out, err = e.bridge.Ask(context.Background(), nil, question("retries use exponential backoff capped at 30s"))
+	require.NoError(t, err)
+	assert.Less(t, time.Since(start), 40*time.Millisecond)
+	assert.Equal(t, protocol.StatusAskInChat, out.Status)
+}
+
+func TestAskHereTool(t *testing.T) {
+	e := setup(t, nil)
+	e.fake.SetViewers(1)
+	e.show(t)
+	_, here, err := e.bridge.AskHereTool(context.Background(), nil, protocol.AskHereInput{})
+	require.NoError(t, err)
+	assert.True(t, here.InChat)
+	assert.Equal(t, MsgHereOn, here.Message)
+	_, out, err := e.bridge.Ask(context.Background(), nil, question("retries use exponential backoff capped at 30s"))
+	require.NoError(t, err)
+	assert.Equal(t, protocol.StatusAskInChat, out.Status)
+
+	_, here, err = e.bridge.AskHereTool(context.Background(), nil, protocol.AskHereInput{Off: true})
+	require.NoError(t, err)
+	assert.False(t, here.InChat)
+	assert.Equal(t, MsgHereOff, here.Message)
+}
+
 func TestAskNudgesWhenUnseen(t *testing.T) {
 	e := setup(t, nil)
 	e.fake.SetViewers(1)
 	e.fake.SetPresence(0, false)
+	e.bridge.StayInViewer = true
 	e.bridge.NudgeDelay = 50 * time.Millisecond
 	e.show(t)
 	start := time.Now()

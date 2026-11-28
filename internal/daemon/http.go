@@ -224,6 +224,11 @@ func (d *Daemon) handlePresence(w http.ResponseWriter, r *http.Request) {
 	ws, real := d.lookup(r.PathValue("ws"))
 	if ws != nil && r.Form.Get("active") == "1" {
 		ws.SeenAt = time.Now()
+		if ws.InChat {
+			// The user is back at the viewer: questions come here again.
+			ws.InChat = false
+			d.hub.Publish(ws.ID, d.stateEvent(ws))
+		}
 	}
 	d.mu.Unlock()
 	if ws == nil {

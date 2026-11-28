@@ -31,6 +31,8 @@ type Server struct {
 	Hidden   int
 	Seen     bool
 	Presence bool
+	// InChat is set by ask_here: asks are answered with in_chat.
+	InChat bool
 	// SessionCwd is the session folder the server answers cwd with.
 	SessionCwd string
 	// OnAsk returns the answer to a question set, or nil to leave it pending.
@@ -185,6 +187,13 @@ func (s *Server) handle(c *conn) {
 			_ = env.Decode(&b)
 			shown := protocol.AskShown{QSID: b.QSID, Viewers: s.viewers(), Matches: []protocol.QuestionMatch{}}
 			shown.Hidden = s.viewersResult().Hidden
+			s.mu.Lock()
+			shown.InChat = s.InChat
+			s.mu.Unlock()
+			if shown.InChat {
+				s.reply(c, env.ID, protocol.TypeAskShown, &shown)
+				continue
+			}
 			for _, q := range b.Questions {
 				for i, d := range q.Docs {
 					shown.Matches = append(shown.Matches, protocol.QuestionMatch{ID: q.ID, Doc: i, Match: match(d)})
@@ -206,6 +215,16 @@ func (s *Server) handle(c *conn) {
 			s.reply(c, env.ID, protocol.TypeResult, res)
 		case protocol.TypeViewers:
 			s.reply(c, env.ID, protocol.TypeResult, s.viewersResult())
+		case protocol.TypeAskHere:
+			var b protocol.AskHere
+			_ = env.Decode(&b)
+			s.mu.Lock()
+			if !b.Auto || !s.Seen {
+				s.InChat = b.On
+			}
+			res := &protocol.AskHereResult{InChat: s.InChat}
+			s.mu.Unlock()
+			s.reply(c, env.ID, protocol.TypeResult, res)
 		case protocol.TypeAskCancel, protocol.TypePing, protocol.TypeDone, protocol.TypeAskMode:
 			s.reply(c, env.ID, protocol.TypeResult, map[string]any{})
 		case protocol.TypeBye:

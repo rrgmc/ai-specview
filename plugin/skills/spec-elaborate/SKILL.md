@@ -139,6 +139,12 @@ section. An existing spec the user names stays where it is.
     says when to reopen `url` in the built-in browser (see **Built-in
     browser**), and tell the user in one line in the chat that new questions
     are waiting there.
+  - `ask_in_chat`: the user is away from the viewer (for example on Remote
+    Control from another device). Ask the same questions now with the
+    built-in question tool, which the hook allows while they are away, with
+    the passage or code each is about in a short line. Keep using `ask` for
+    later questions: it says when to ask in the chat again, and the questions
+    return to the viewer once the user uses it.
   - `dismissed` (the user clicked Skip): continue without that decision, or
     ask in chat if it is essential.
   - `deferred` (with `answered`): the user chose **Decide later** for these

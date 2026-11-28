@@ -107,6 +107,11 @@ inside the folder for a folder spec, and hold the quote.
   `in_chat` for "Back to chat", which also copies the questions to the
   clipboard, and `dismissed` for "Skip". "Send answers" names the questions
   still unanswered and goes to the first. There is no `keep_open`.
+- **No move to the chat.** The bridge moves unseen questions to the chat for
+  a user on another device (`ask_here`, 01). The mod cannot tell whether
+  anyone sees the pane, so it has no `ask_in_chat` and no `ask_here`; a user
+  away from the machine stops the waiting `ask` and runs
+  `/ai-contextview:ask-mode-mod off`.
 - **Review.** A single choice or "Decide later" moves on to the next
   unanswered question. Once every question has an answer, the form shows a
   review in its place, as the browser page does: one line per question with

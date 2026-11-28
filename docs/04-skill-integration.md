@@ -156,6 +156,10 @@ beside the chat.
   - `in_chat`: stop and wait for the user's message. The question text is
     already on the user's clipboard.
   - `pending`: call `ask_wait` with the returned id.
+  - `ask_in_chat`: the user is away from the viewer; ask the same questions
+    with the built-in question tool, which the hook allows then (01,
+    `ask_here`). The `ask-here` skill moves the questions to the chat on
+    request, for a user who stopped a waiting `ask` from another device.
   - `dismissed`: continue without that decision, or ask in chat if it's
     essential.
   - `keep_open` (with `in_chat` or `dismissed`): in a change folder, write one

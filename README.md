@@ -102,6 +102,19 @@ spec, ends this.
 `/ai-contextview:ask-mode-mod` does the same in the pane. To turn ask mode on for
 every session, set `AI_CONTEXTVIEW_ASK_MODE=always` (see the settings below).
 
+### Away from the machine: questions in the chat
+
+The viewer is a page on the machine running Claude (`127.0.0.1`), so it does
+not open from another device, for example when you follow a session over
+Remote Control. When a question waits 45 seconds and nobody uses the viewer
+page, Claude asks it in the chat instead, and so the next ones, until you use
+the viewer page again; the page shows "Questions in chat" meanwhile. To move
+the questions to the chat at once, stop the waiting question and run
+`/ai-contextview:ask-here`; `/ai-contextview:ask-here off` sends them back. Set
+`AI_CONTEXTVIEW_AWAY=wait` to keep questions in the viewer instead. The pane
+(`-mod` skills) does not do this: from another device, run
+`/ai-contextview:ask-mode-mod off`.
+
 ### Spec mode: a spec from any skill
 
 `/ai-contextview:spec-mode` is ask mode that expects a spec. Run it before your
@@ -243,6 +256,7 @@ directory within 2 hours takes the old workspace over.
 |---|---|---|
 | `AI_CONTEXTVIEW_ASK_WAIT` | `10m` | How long `ask` blocks before returning `pending`. |
 | `AI_CONTEXTVIEW_ASK_MODE` | | `always` turns ask mode on for every session, in the viewer and in the pane. |
+| `AI_CONTEXTVIEW_AWAY` | `chat` | What happens when a question waits 45 seconds and nobody uses the viewer page: `chat` moves the questions to the chat until someone uses the page again; `wait` keeps them in the viewer and Claude says in the chat that they are waiting. |
 | `AI_CONTEXTVIEW_DOC_PATHS` | | Comma-separated globs (relative to the project or absolute; `**` for any folders). When set, only matching files Claude writes can become the working document in ask mode. |
 | `AI_CONTEXTVIEW_OPEN` | `pane` | `pane` asks Claude to open the viewer in the built-in browser of the Claude desktop app; when the user closed it, `ask` returns at once so Claude reopens it; without the pane, the default browser opens 10 seconds after a question arrives with no page open. `browser` always uses the default browser. `never` opens nothing. |
 | `AI_CONTEXTVIEW_SOCKET` | see below | Socket path shared by bridge and daemon. |

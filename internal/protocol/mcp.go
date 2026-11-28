@@ -58,7 +58,7 @@ type AskInput struct {
 
 // AskOutput is the output of ask and ask_wait.
 type AskOutput struct {
-	Status        string   `json:"status" jsonschema:"answered, in_chat, pending or dismissed"`
+	Status        string   `json:"status" jsonschema:"answered, in_chat, ask_in_chat, pending or dismissed"`
 	Answers       []Answer `json:"answers,omitempty"`
 	Deferred      []string `json:"deferred,omitempty" jsonschema:"questions the user chose to decide later; record them as open questions and ask again before finishing"`
 	KeepOpen      []string `json:"keep_open,omitempty" jsonschema:"questions the user wants kept as open questions"`
@@ -102,6 +102,19 @@ type AskModeOutput struct {
 
 // OffNext is AskModeOutput.Next when ask mode is turned off.
 const OffNext = "ai-contextview is off for this session. Ask every question in the chat or with the built-in question tool from now on, not with the ask tool, even while a spec is open. The spec stays in the viewer."
+
+// AskHereInput is the input of ask_here.
+type AskHereInput struct {
+	Off bool `json:"off,omitempty" jsonschema:"true moves the questions back to the viewer; omit to ask in the chat"`
+}
+
+// AskHereOutput is the output of ask_here.
+type AskHereOutput struct {
+	InChat bool `json:"in_chat"`
+	// Closed is the question set that was waiting in the viewer, if any.
+	Closed  string `json:"closed,omitempty" jsonschema:"the question set that was waiting in the viewer: ask its questions in the chat now"`
+	Message string `json:"message"`
+}
 
 // AskWaitInput is the input of ask_wait.
 type AskWaitInput struct {

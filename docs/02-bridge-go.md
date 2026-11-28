@@ -104,6 +104,15 @@ resolved code refs.
    - The MCP request is cancelled (the user pressed Esc in Claude) → send
      `ask_cancel{reason:"client_cancelled"}`.
 
+   - `ask_shown` has `in_chat` (the questions are in the chat, `ask_here`)
+     → return `status: "ask_in_chat"` at once.
+   - Nobody used the page by the nudge delay (01, Failure modes) → send
+     `ask_here {on, auto}` and return `ask_in_chat`, unless
+     `AI_CONTEXTVIEW_AWAY=wait`.
+
+### `ask_here`
+Send `ask_here {on: !off}` and return `{in_chat, closed?, message}` (01).
+
 ### `ask_wait`
 Wait again on the stored `qs_id`. If the daemon already sent `ask_result` while
 nobody was waiting, the bridge has buffered it, so return it right away.

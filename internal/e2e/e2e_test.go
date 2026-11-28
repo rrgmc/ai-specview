@@ -91,7 +91,7 @@ func TestEndToEnd(t *testing.T) {
 	for _, tl := range list.Tools {
 		names = append(names, tl.Name)
 	}
-	assert.ElementsMatch(t, []string{"spec_show", "focus", "ask", "ask_wait", "ask_mode", "spec_done"}, names)
+	assert.ElementsMatch(t, []string{"spec_show", "focus", "ask", "ask_wait", "ask_mode", "ask_here", "spec_done"}, names)
 
 	call := func(name string, args any) *mcp.CallToolResult {
 		res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})

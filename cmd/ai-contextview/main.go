@@ -121,7 +121,7 @@ func runMCP() error {
 
 	bridge = &tools.Bridge{
 		Cwd: id.Cwd, Daemon: client, Resolver: resolve.New(), AskWait: askWait,
-		Open: tools.OpenBrowser, OpenIn: tools.OpenInFromEnv(), Logf: logger.Printf,
+		Open: tools.OpenBrowser, OpenIn: tools.OpenInFromEnv(), StayInViewer: tools.AwayFromEnv(), Logf: logger.Printf,
 	}
 	server := mcp.NewServer(&mcp.Implementation{Name: "ai-contextview", Version: version}, &mcp.ServerOptions{
 		Instructions: "ai-contextview shows the spec and the code beside the chat. Call spec_show when a spec is created or " +

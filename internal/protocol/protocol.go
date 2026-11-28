@@ -40,6 +40,9 @@ const (
 	// TypeAskMode turns ask mode on or off for the workspace; the reply is
 	// a result with AskModeResult.
 	TypeAskMode = "ask_mode"
+	// TypeAskHere moves the session's questions to the chat, or back to the
+	// viewer; the reply is a result with AskHereResult.
+	TypeAskHere = "ask_here"
 	// TypeDocWritten is sent by `ai-contextview hook` after Claude writes a
 	// markdown file; the reply is a result with DocWrittenResult.
 	TypeDocWritten = "doc_written"
@@ -90,6 +93,9 @@ const (
 	StatusInChat    = "in_chat"
 	StatusDismissed = "dismissed"
 	StatusPending   = "pending"
+	// StatusAskInChat means nobody is at the viewer: Claude asks the same
+	// questions in the chat, with the built-in question tool.
+	StatusAskInChat = "ask_in_chat"
 )
 
 // Envelope wraps every socket message.
@@ -446,6 +452,27 @@ type AskMode struct {
 
 func (a *AskMode) Validate() error { return nil }
 
+// AskHere moves the session's questions to the chat (On) or back to the
+// viewer. While they are in the chat, the hook allows the built-in question
+// tool, ask returns ask_in_chat at once, and a pending question set is
+// closed with ask_in_chat. Someone using a viewer page moves them back. Auto
+// is set when the bridge moved them because nobody used the page.
+type AskHere struct {
+	On   bool `json:"on"`
+	Auto bool `json:"auto,omitempty"`
+}
+
+func (a *AskHere) Validate() error { return nil }
+
+// AskHereResult answers ask_here. Closed is the question set it closed, if
+// one was pending.
+type AskHereResult struct {
+	InChat bool   `json:"in_chat"`
+	Closed string `json:"closed,omitempty"`
+}
+
+func (a *AskHereResult) Validate() error { return nil }
+
 // AskModeResult answers ask_mode. Shown is the absolute path of a spec-mode
 // path that already existed and is now the working document.
 type AskModeResult struct {
@@ -608,6 +635,9 @@ type AskShown struct {
 	// such as a closed browser pane whose tab is still open.
 	Hidden  int             `json:"hidden,omitempty"`
 	Matches []QuestionMatch `json:"matches"`
+	// InChat is set when the session's questions are in the chat (ask_here):
+	// the set was not shown, and Claude asks it in the chat.
+	InChat bool `json:"in_chat,omitempty"`
 }
 
 func (a *AskShown) Validate() error {
@@ -637,7 +667,7 @@ func (a *AskResult) Validate() error {
 		if len(a.Answers) == 0 {
 			return errors.New("ask_result: answered without answers")
 		}
-	case StatusInChat, StatusDismissed:
+	case StatusInChat, StatusDismissed, StatusAskInChat:
 	default:
 		return fmt.Errorf("ask_result: bad status %q", a.Status)
 	}
@@ -678,6 +708,9 @@ type ActiveResult struct {
 	// AskMode is true when the session is active because of ask mode, with
 	// no spec open.
 	AskMode bool `json:"ask_mode,omitempty"`
+	// InChat is set while the session's questions are in the chat
+	// (ask_here): the hook allows the built-in question tool.
+	InChat bool `json:"in_chat,omitempty"`
 }
 
 // Viewers asks how many browser pages show the bridge's workspace. Its body
